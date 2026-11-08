@@ -229,6 +229,38 @@ maxCo           0.5;           // 若求解器/controlDict 支持；否则保持
 
 改完后重新 `./Allrun`（或从最近时间步 `startFrom latestTime` 续算）。
 
+### 时间写出与日志打印间隔
+
+都在算例 `system/controlDict`（当前 `runTimeModifiable yes`，**计算进行中改文件也会在下一时间步生效**）。
+
+**保存场结果（磁盘写出）**
+
+```cpp
+writeControl    adjustableRunTime;  // 按物理时间 [s]
+writeInterval   0.05;               // 每隔多少秒写一次；改大则少存（如 1 或 5）
+```
+
+按时间步数写：
+
+```cpp
+writeControl    timeStep;
+writeInterval   100;                // 每 100 步存一次
+```
+
+只保留最近 N 份：`purgeWrite 10;`（`0` 表示全留）。
+
+**终端 / `log.solidificationFoam` 打印**
+
+`solidificationFoam` **每个时间步都会打印**残差（求解器内 `Info`），没有单独的 printInterval。想少刷屏只能加大 `deltaT`（步数变少；Courant 大时慎用），或改源码后重新 `Allwmake`。
+
+**残差函数文件**（`postProcessing/residuals/`）默认每步写。在 `system/residuals` 里可加：
+
+```cpp
+writeControl    timeStep;
+writeInterval   50;   // 每 50 步记一次到文件
+```
+
+
 ### 合金热力学（`constant/thermoProperties`）
 
 - `Tmelt` / `Teut`：熔点、共晶温度 [K]
@@ -467,6 +499,33 @@ multipass transfer openfoam:/tmp/SMACS_I-results.tar.gz /tmp/SMACS_I-results.tar
 ### 6.5 拷到本机 Downloads（给 ParaView 用）
 
 目标目录：`/Users/yangyangmiao/Downloads/`
+
+**只要一部分结果（推荐日常看图，体积小）**
+
+虚拟机内重建最新步并只打包 `0` / `constant` / `system` + 最近几个时间目录，再拷到 Downloads：
+
+```bash
+multipass exec openfoam -- bash -c '
+. /opt/openfoam14/etc/bashrc
+CASE=$HOME/OpenFOAM/ubuntu-14/run/OpenFOAM-Solidification/tutorials/multiphase/solidificationFoam/SMACS_I
+cd "$CASE"
+reconstructPar -latestTime
+ls -1d [0-9]* | sort -g | tail -8 > /tmp/pick-times.txt
+ST=/tmp/SMACS_I-paraview-export
+rm -rf "$ST" && mkdir -p "$ST/SMACS_I"
+cp -a 0 constant system "$ST/SMACS_I/"
+while read -r d; do cp -a "$d" "$ST/SMACS_I/"; done < /tmp/pick-times.txt
+tar -czf /tmp/SMACS_I-partial.tar.gz -C "$ST" SMACS_I
+'
+multipass transfer openfoam:/tmp/SMACS_I-partial.tar.gz \
+  /Users/yangyangmiao/Downloads/SMACS_I-partial.tar.gz
+mkdir -p /Users/yangyangmiao/Downloads/SMACS_I-paraview
+tar -xzf /Users/yangyangmiao/Downloads/SMACS_I-partial.tar.gz \
+  -C /Users/yangyangmiao/Downloads/SMACS_I-paraview
+touch /Users/yangyangmiao/Downloads/SMACS_I-paraview/SMACS_I/SMACS_I.foam
+open -a ParaView /Users/yangyangmiao/Downloads/SMACS_I-paraview/SMACS_I/SMACS_I.foam
+```
+
 
 **A. 只要重建后的场（推荐，体积小，适合 ParaView）**
 
