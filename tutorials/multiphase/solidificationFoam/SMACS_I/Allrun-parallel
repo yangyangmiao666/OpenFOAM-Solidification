@@ -1,0 +1,33 @@
+#!/bin/sh
+cd ${0%/*} || exit 1    # Run from this directory
+
+# Source tutorial run functions
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+
+# Usage:
+#   ./Allrun-parallel          # use numberOfSubdomains in system/decomposeParDict
+#   ./Allrun-parallel 8        # set MPI ranks to 8 (writes decomposeParDict)
+#   NP=8 ./Allrun-parallel     # same via env (argv wins over NP)
+#
+# Tip: if a previous serial/parallel log exists, RunFunctions would skip the
+# solver. We remove log.$application so this script always launches MPI.
+
+application=$(getApplication)
+
+nProcs="${1:-${NP:-}}"
+if [ -n "$nProcs" ]; then
+    echo "Setting numberOfSubdomains = $nProcs"
+    foamDictionary -entry numberOfSubdomains -set "$nProcs" system/decomposeParDict
+fi
+
+runApplication blockMesh
+
+# Drop stale processor dirs / solver log so a fresh parallel run is not skipped
+rm -rf processor*
+rm -f "log.$application"
+
+runApplication decomposePar
+runParallel $application
+runApplication reconstructPar
+
+#------------------------------------------------------------------------------
